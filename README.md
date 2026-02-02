@@ -1,155 +1,180 @@
-# Lab 3: Overrun of Intended Bounds in a C Program
+# CYBR 3050 – Lab: Buffer Overflow Mechanics
 
 ## Background
-This lab explores what can happen when a program reads beyond the **intended bounds** of an array in C. You will use a small program (**mystuff.c**) and the GNU Debugger (**gdb**) to observe memory layout in and around a C `struct`.
+Buffer overflow is a memory-safety bug where a program writes past the end of a fixed-size buffer. In classic stack-based overflows, this can corrupt **control data** (such as a saved return address), which historically enabled attackers to alter program flow and execute unintended code.
 
-This activity is adapted from a Labtainers exercise illustrating overrunning intended bounds in a C program.
+This lab builds on your earlier “intended bounds” exploration (reading past a buffer) and adds a **controlled, safety-focused** demonstration of a stack buffer overflow. The goal is to *observe* how overwriting happens and how modern defenses respond—**not** to gain a shell or escalate privileges.
+
+The reference document explains that buffer overflow can change control flow by mixing storage for data and storage for controls (e.g., return addresses). 
 
 ---
 
 ## Step 1: Get the Lab Files (GitHub Clone)
-The files needed for this lab are in the course GitHub repo.
-
 1. Open a terminal.
-2. Change to a directory where you keep lab work (example: your home directory).
-3. Clone the repository:
+2. Clone the lab repository:
    ```bash
-   git clone https://github.com/CYBR-3050/Lab3
+   git clone https://github.com/CYBR-3050/Labs/Lab3
    ```
-4. Change into the lab directory (adjust if your repo layout differs):
+3. Change into the lab directory:
    ```bash
-   cd Lab3
+   cd Lab3/Content
    ```
-5. Confirm you can see `mystuff.c`:
+4. Confirm the lab files are present:
    ```bash
    ls -la
    ```
+   You should see:
+   - `mystuff.c`
+   - `vuln_stack.c`
+   - `make_input.py`
+   - `Makefile`
 
 ### Reflection Questions
-- What do you know about **buffer overflow** attacks?
-- What are the differences between compiled binaries and source code?
+- Why is it important to verify the origin and integrity of security lab code before compiling/running it?
+- In an operational environment, what risks come with compiling and executing unknown C code?
 
 ---
 
-## Step 2: Review the `mystuff.c` Program
-Before compiling, read the program and identify the data structure layout.
+## Step 2: “Overrun of Intended Bounds” Refresher (Read Beyond a Buffer)
+This step reinforces the *memory layout* idea using a program that performs **out-of-bounds reads** (not writes).
 
-1. View the code:
+1. Build and run:
    ```bash
-   less mystuff.c
-   ```
-2. Locate the `myData` struct and identify:
-   - The `public_info` array size
-   - The `pin` field type
-   - Any additional fields after `pin`
-
-The lab is designed around this question: if `public_info[19]` is the last element, what does `public_info[20]` refer to? 
-
-### Reflection Questions
-- In C, what does it mean to access an array index outside the declared bounds?
-- Based on the struct definition, what do you suspect is adjacent to `public_info` in memory?
-
----
-
-## Step 3: Compile and Run the Program
-You will compile with debug symbols and (optionally) as a 32-bit binary for easier inspection.
-
-We first need to update Kali.
-
-Do this in your Kali terminal:
-
-1) Update package lists
-```bash
-sudo apt update
-```
-
-2) Install the missing headers + compiler toolchain
-```bash
-sudo apt install -y build-essential libc6-dev
-```
-
-3) Install Multilib Support (so we can compile in 32-bits)
-```bash
-sudo apt install -y gcc-multilib libc6-dev-i386
-```
-Now we are good to compile and run the program.
-
-1. Compile:
-   ```bash
-   gcc -m32 -g -o mystuff mystuff.c
-   ```
-   This matches the compile approach in the sample lab.
-
-   If `-m32` fails, install multilib support:
-   ```bash
-   sudo apt update
-   sudo apt install -y gcc-multilib
-   ```
-
-2. Run:
-   ```bash
+   make mystuff
    ./mystuff
    ```
-3. When prompted for offsets, try:
-   - Inside the array: `0`, `5`, `19`
-   - Beyond the array: `20`, `21`, `24`, `28`, `32`
+2. When prompted for offsets, try values:
+   - Inside bounds: `0`, `5`, `19`
+   - Outside bounds: `20`, `24`, `28`, `32`
 
-The program prints the addresses of fields and lets you view byte values at selected offsets. 
+### Background (What’s happening and why it matters)
+In C, arrays do not carry bounds metadata at runtime. When you read `public_info[20]`, the CPU will still read “whatever byte is at that memory address,” even if it belongs to the next field in the struct. This is why memory-safety matters: neighboring data can be exposed or corrupted.
 
 ### Reflection Questions
-- What are the printed addresses of `public_info` and `pin`? How many bytes apart are they?
-- At what offset do you first observe bytes that seem to correspond to `pin`?
-- Why might there be padding between fields in a struct (alignment)? 
+- What data appeared when you read beyond the intended bounds?
+- Why are out-of-bounds reads a security concern even if nothing “crashes”?
 
 ---
 
-## Step 4: Explore Memory Using `gdb`
-Now confirm your observations by examining memory in the debugger.
+## Step 3: Build the Overflow Demo Program (Protected Build)
+Now you will compile a demonstration program that contains an unsafe `strcpy()` into a small stack buffer. The program reads input from `input.bin`.
 
-GDB, the GNU Project debugger, allows you to see what is going on `inside' another program while it executes -- or what another program was doing at the moment it crashed.
-
-GDB can do four main kinds of things (plus other things in support of these) to help you catch bugs in the act:
-
-- Start your program, specifying anything that might affect its behavior.
-- Make your program stop on specified conditions.
-- Examine what has happened, when your program has stopped.
-- Change things in your program, so you can experiment with correcting the effects of one bug and go on to learn about another.
-
-1. Start gdb:
+1. Build the protected version:
    ```bash
-   gdb mystuff
+   make vuln_protected
    ```
-2. View source:
-   ```gdb
-   list
+2. Create a small input and run:
+   ```bash
+   ./make_input.py 16
+   ./vuln_protected input.bin
    ```
-3. Set a breakpoint inside `showMemory` on the line where it prints the byte value, then run:
-   ```gdb
-   list showMemory
-   break <line_number>
-   run
+3. Create a larger input and run again:
+   ```bash
+   ./make_input.py 200
+   ./vuln_protected input.bin
    ```
 
-4. When the breakpoint hits, display 10 words (40 bytes) starting at the struct:
-   ```gdb
-   x/10x &data
-   ```
+### Background (What’s happening and why it matters)
+The vulnerable function copies bytes into a fixed-size buffer without bounds checking. In the classic model, if enough bytes are copied, the overflow can overwrite adjacent stack values, potentially including saved frame pointers and return addresses. The reference describes this as corruption of control flow (e.g., return address) caused by overflow. 
+
+Modern toolchains often include mitigations (stack canaries/StackGuard, ASLR, NX, PIE) that change what you observe. The reference document discusses StackGuard and non-executable stack as protection schemes. 
 
 ### Reflection Questions
-- Does the gdb memory dump correspond to what you observed while running normally? Why or why not?
-- Can you identify where `public_info` ends and where `pin` begins?
-- What is the advantage of using gdb vs. only printing memory from inside the program?
+- What differences did you observe between running with 16 bytes vs. 200 bytes?
+- Did the program crash? If so, what message did you see and what do you think it indicates?
 
 ---
 
-## Step 5: Extra Exploration (Optional)
-If you have time, explore the return path described in the sample lab: step through instructions near the end of `handleMyStuff`, observe `ret`, and inspect the stack. 
+## Step 4: Use AddressSanitizer (ASan) to See a Diagnostic Report
+ASan is a compiler/runtime tool that detects memory errors and prints a detailed report.
+
+1. Build the ASan version:
+   ```bash
+   make vuln_asan
+   ```
+2. Generate an input likely to overflow and run:
+   ```bash
+   ./make_input.py 200
+   ./vuln_asan input.bin
+   ```
+
+### Background (What’s happening and why it matters)
+ASan inserts checks and metadata so that overflows can be detected with clearer explanations than a generic crash. In defensive work, instrumentation is often used during development/testing to reduce exploitable vulnerabilities before deployment.
 
 ### Reflection Questions
-- What does the `ret` instruction do at a high level?
-- Why do return addresses matter in memory safety vulnerabilities?
+- What did ASan report (summary in your own words)?
+- How does instrumentation like ASan change a defender’s workflow compared to “debugging crashes”?
 
 ---
 
-## Step 6: Submission
-Submit **one document** containing answers to all reflection questions.
+## Step 5: Observe Control-Data Overwrite in gdb (Controlled Demonstration)
+In this step, you will compile an **observation-friendly** binary that disables some protections at compile time so you can see stack behavior more directly under gdb.
+
+> **Safety note:** This is only for controlled lab observation. Do not use these flags for real software.
+
+1. Build the observation binary:
+   ```bash
+   make vuln_unprotected
+   ```
+2. Start gdb:
+   ```bash
+   gdb ./vuln_unprotected
+   ```
+3. (Optional) In gdb, reduce randomness for this debug session:
+   ```gdb
+   set disable-randomization on
+   ```
+4. Set a breakpoint in `bof` and run with a large input:
+   ```gdb
+   break bof
+   run input.bin
+   ```
+5. When it breaks, inspect the stack near the current frame:
+   ```gdb
+   info frame
+   x/40x $esp
+   ```
+6. Continue execution:
+   ```gdb
+   continue
+   ```
+
+### Background (What’s happening and why it matters)
+A stack frame contains local variables (like `buffer`) and also control information used to return to the caller (e.g., saved return address). The reference provides a conceptual stack layout and explains that knowing buffer location helps reason about where the return address is stored.
+
+This lab is designed to help you recognize when unsafe copies can corrupt control data and how defenders/debuggers validate that risk.
+
+### Reflection Questions
+- In your stack dump, do you see a region filled with `0x41414141` (AAAA)? Where is it relative to the frame?
+- What does that imply about how far your input reached in memory?
+- Why do compile-time mitigations (stack protector, PIE, NX) matter for real systems?
+
+---
+
+## Step 6: Compare Protections (Short Analysis)
+You have now seen three perspectives:
+- Default (“protected”) behavior
+- ASan diagnostics
+- Direct stack observation in gdb (compile-time toggles for visibility)
+
+### Reflection Questions
+- Which approach (protected run, ASan, gdb) gave you the most actionable understanding, and why?
+- If you were a defender triaging a crash report, what artifacts would you want (core dump, ASan report, logs, reproduction steps)?
+
+---
+
+## Step 7: Submission
+Submit **one document** containing your answers to all reflection questions.
+Include:
+- The input sizes you tested
+- Any key error messages (copy/paste is fine)
+- Short explanations in your own words
+
+---
+
+## Shutdown Lab
+- Exit gdb with `quit` (if used)
+- Clean up build artifacts if desired:
+  ```bash
+  make clean
+  ```
