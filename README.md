@@ -35,15 +35,22 @@ The reference document explains that buffer overflow can change control flow by 
 
 ---
 
-## Step 2: “Overrun of Intended Bounds” Refresher (Read Beyond a Buffer)
+## Step 2: “Overrun of Intended Bounds” (Read Beyond a Buffer)
 This step reinforces the *memory layout* idea using a program that performs **out-of-bounds reads** (not writes).
 
-1. Build and run:
+1. Examine the source code for mysuff.c
+   ```bash
+   less mystuff
+   ```
+
+2. Build and run:
    ```bash
    make mystuff
    ./mystuff
    ```
-2. When prompted for offsets, try values:
+   **NOTE:** You will get a ***Warning*** when you compile this file.
+
+3. When prompted for offsets, try values:
    - Inside bounds: `0`, `5`, `19`
    - Outside bounds: `20`, `24`, `28`, `32`
 
@@ -112,6 +119,23 @@ In this step, you will compile an **observation-friendly** binary that disables 
 
 > **Safety note:** This is only for controlled lab observation. Do not use these flags for real software.
 
+You must first install GDB. 
+
+GDB, the GNU Project debugger, allows you to see what is going on `inside' another program while it executes -- or what another program was doing at the moment it crashed.
+
+GDB can do four main kinds of things (plus other things in support of these) to help you catch bugs in the act:
+
+- Start your program, specifying anything that might affect its behavior.
+- Make your program stop on specified conditions.
+- Examine what has happened, when your program has stopped.
+- Change things in your program, so you can experiment with correcting the effects of one bug and go on to learn about another.
+
+```bash
+sudo apt update -y
+sudo apt install gdb -y
+```
+
+
 1. Build the observation binary:
    ```bash
    make vuln_unprotected
@@ -132,7 +156,7 @@ In this step, you will compile an **observation-friendly** binary that disables 
 5. When it breaks, inspect the stack near the current frame:
    ```gdb
    info frame
-   x/40x $esp
+   x/64gx $rsp
    ```
 6. Continue execution:
    ```gdb
