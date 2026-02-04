@@ -5,15 +5,13 @@ Buffer overflow is a memory-safety bug where a program writes past the end of a 
 
 This lab builds on your earlier “intended bounds” exploration (reading past a buffer) and adds a **controlled, safety-focused** demonstration of a stack buffer overflow. The goal is to *observe* how overwriting happens and how modern defenses respond—**not** to gain a shell or escalate privileges.
 
-The reference document explains that buffer overflow can change control flow by mixing storage for data and storage for controls (e.g., return addresses). 
-
 ---
 
 ## Step 1: Get the Lab Files (GitHub Clone)
 1. Open a terminal.
 2. Clone the lab repository:
    ```bash
-   git clone https://github.com/CYBR-3050/Labs/Lab3
+   git clone https://github.com/CYBR-3050/Lab3
    ```
 3. Change into the lab directory:
    ```bash
@@ -84,7 +82,7 @@ Now you will compile a demonstration program that contains an unsafe `strcpy()` 
 ### Background (What’s happening and why it matters)
 The vulnerable function copies bytes into a fixed-size buffer without bounds checking. In the classic model, if enough bytes are copied, the overflow can overwrite adjacent stack values, potentially including saved frame pointers and return addresses. The reference describes this as corruption of control flow (e.g., return address) caused by overflow. 
 
-Modern toolchains often include mitigations (stack canaries/StackGuard, ASLR, NX, PIE) that change what you observe. The reference document discusses StackGuard and non-executable stack as protection schemes. 
+Modern toolchains often include mitigations (stack canaries/StackGuard, ASLR, NX, PIE) that change what you observe. 
 
 ### Reflection Questions
 - What differences did you observe between running with 16 bytes vs. 200 bytes?
